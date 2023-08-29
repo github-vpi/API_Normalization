@@ -2,7 +2,6 @@ from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
-from qdrant_client import QdrantClient
 import json
 from fastapi import Header, Query, status, APIRouter, HTTPException, FastAPI, UploadFile, File, Request, Form
 from pydantic import BaseModel
