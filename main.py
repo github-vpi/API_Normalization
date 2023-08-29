@@ -62,7 +62,7 @@ async def upload_las(las_files: List[UploadFile] = File(...), path_df: UploadFil
     # Run prediction and return the result in JSON format
     predicted_result = normalize_API(df, path_df, parameter)
     return predicted_result
-@app.get('/test')
+@app.get('/testing')
 async def test(message: str = Query(None, alias="message")):
     content = f"""<html>
                     <head>
