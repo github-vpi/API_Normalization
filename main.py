@@ -19,7 +19,7 @@ app = FastAPI()
 
 @app.get('/hello')
 async def hello():
-    return {"message": "Hello World"}
+    return {"message": "Hello World 1"}
 
 
 @app.get('/normalization')
@@ -69,6 +69,8 @@ async def upload_las(las_files: List[UploadFile] = File(...), path_df: UploadFil
     # Run prediction and return the result in JSON format
     predicted_result = normalize_API(df, path_df, parameter)
     return predicted_result
+
+
 @app.get('/testing')
 async def testing(message: str = Query(None, alias="message")):
     content = f"""<html>
