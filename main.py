@@ -13,7 +13,14 @@ import lasio
 import pandas as pd
 import tempfile
 
+
 app = FastAPI()
+
+
+@app.get('/hello')
+async def hello():
+    return {"message": "Hello World"}
+
 
 @app.get('/normalization')
 async def upload_las(las_files: List[UploadFile] = File(...), path_df: UploadFile = File(...), query_params: str = Form(...)):
