@@ -6,7 +6,7 @@ import json
 from fastapi import Header, Query, status, APIRouter, HTTPException, FastAPI, UploadFile, File, Request, Form
 from pydantic import BaseModel
 import json as json
-from .predict_handlers import normalize_API
+from predict_handlers import normalize_API
 from typing import List
 from fastapi import UploadFile, HTTPException
 import lasio
