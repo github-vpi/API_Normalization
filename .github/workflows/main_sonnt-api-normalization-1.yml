@@ -60,4 +60,4 @@ jobs:
         with:
           app-name: 'sonnt-api-normalization-1'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_2BDBCB8842DF43E9885A07822BFF4926 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_6D0B1657794E4382B20C871AB30E9EA8 }}
