@@ -6,7 +6,6 @@ import pandas as pd
 # # #Tạo thư viện sử dụng
 def normalize_API(df_full, path_df, parameter):
     import sys
-    sys.path.append('/lakehouse/default/Files')
     sys.path.append('../')
     #Nhập các thư viện cần thiết, để xây dựng thuật toán
     import lasio
@@ -457,5 +456,184 @@ def normalize_API(df_full, path_df, parameter):
 
     print(f"Tổng số cả khóa và giá trị trong chuỗi JSON: {total}")
     # result_in_json_full = pd.read_csv(df_full)
+    result_in_json = json.dumps(result_in_json_full)
+    return result_in_json
+def normalize_curve(df_full, parameter):
+    import sys
+    sys.path.append('/lakehouse/default/Files')
+    sys.path.append('../')
+    #Nhập các thư viện cần thiết, để xây dựng thuật toán
+    import pandas as pd
+    import numpy as np
+
+    from sklearn.mixture import GaussianMixture
+
+#     #Setup parameter for API
+    algorithm = parameter.get("algorithm") #algorithm #"Auto selection' #'Manual'
+    linear_shift = parameter.get("linear_shift")
+
+    #Chọn lọc và lựa chọn dữ liệu cho quá trình chuẩn hoá 
+    min_quantile_value = parameter.get("min_quantile_value") #Người dùng nhập liệu giá trị xác xuất nhỏ nhất muốn xác định (theo tính năng người dùng tự nhập liệu)
+    max_quantile_value = parameter.get("max_quantile_value") #Người dùng nhập liệu giá trị xác xuất lớn nhất muốn xác định (theo tính năng người dùng tự nhập liệu)
+    ref_low = parameter.get("ref_low") #Người dùng nhập liệu giá trị xác xuất lớn nhất muốn xác định (theo tính năng người dùng tự nhập liệu)
+    ref_high = parameter.get("ref_high") #Người dùng nhập liệu giá trị xác xuất nhỏ nhất muốn xác định (theo tính năng người dùng tự nhập liệu)
+    a = parameter.get("a") #Tham số áp dụng cho quá trình chuẩn hoá một điểm
+
+    #Người dùng xác định đường cong sử dụng để chuẩn hoá
+    # column_name = parameter.get("column_name") #Tên cột đường cong muốn chuẩn hoá
+    curve_name =  parameter.get("curve_name") #Tên đường cong muốn chuẩn hoá
+    normalized_curve_name = parameter.get("normalized_curve_name") #Tên đường cong sau khi chuẩn hoá
+
+    #Danh sách giếng khoan được nhập vào
+
+    #Loại bỏ các điểm null data trong đường log
+    def drop_na_subset(df, curve_name):
+        """
+        Hàm này loại bỏ các hàng có giá trị NaN trong các cột con trong DataFrame df.
+        Arguments:
+        df -- DataFrame đầu vào
+        subset_cols -- Danh sách tên các cột con để kiểm tra giá trị NaN  
+        Returns:
+        DataFrame -- DataFrame mới đã loại bỏ các hàng có giá trị NaN
+        """
+        return df.dropna(subset=curve_name)
+    
+    #Hiệu chỉnh đường log theo công thức 2 điểm
+
+    #Tính các giá trị quantile của đường log được chọn để hiệu chỉnh cho các giếng khoan 
+    def calculated_quantile (df, curve_name, min_quantile_value,max_quantile_value):
+        '''Hàm này dùng để tính các giá trị quantile của đường log'''
+        min_quantile_curve = df.groupby('WELL')[curve_name].quantile(min_quantile_value)
+        max_quantile_curve = df.groupby('WELL')[curve_name].quantile(max_quantile_value)
+        return min_quantile_curve, max_quantile_curve
+
+    #Tạo các cột mới well_low, well_high
+    # def quantile_new_col(df, well_low, well_high, curve_name, min_quantile_value, max_quantile_value):
+    def quantile_new_col(df, curve_name, min_quantile_value, max_quantile_value):
+        '''Hàm này dùng để thêm cột đã tính các giá trị quantile vào dataframe chứa dữ liệu đang cần normalize'''
+        min_quantile_curve, max_quantile_curve = calculated_quantile(df, curve_name, min_quantile_value, max_quantile_value)
+        df["well_low"] = df['WELL'].map(min_quantile_curve)
+        df["well_high"] = df['WELL'].map(max_quantile_curve)
+        return df["well_low"], df["well_high"]
+
+        #Hàm hiệu chỉnh đường log bằng cách  shift ngang
+    def normalize_shifting_curve(df, curve_name, ref_low, well_low, normalized_curve_name):
+        def normalize_shifting(a, curve_val, ref_low, well_low):
+            return float(a) * curve_val + (ref_low - well_low)
+        
+        df[normalized_curve_name] = df.apply(lambda x: normalize_shifting(a, x[curve_name], ref_low, x["well_low"]), axis=1)
+        return df
+
+    def gmm_analysis(data, curve_name):
+        '''Hàm này để sử dụng thuật toán Gaussian Mixture Model (GMM) tính quantile cho 1 đường log của tập hợp các giếng khoan đã được lựa chọn'''
+        # Prepare data
+        X = data[curve_name].values.reshape(-1, 1)
+
+        # Build and fit GMM model
+        n_components = 1
+        gmm = GaussianMixture(n_components=n_components)
+        gmm.fit(X)
+
+        # Get representative distribution parameters
+        means = gmm.means_
+        covariances = gmm.covariances_
+
+        # Generate synthetic samples from the fitted GMM
+        samples, _ = gmm.sample(X.shape[0])
+
+        # Flatten the samples array
+        samples = samples.flatten()
+
+        # Compute percentiles
+        p5 = np.percentile(samples, 5)
+        p95 = np.percentile(samples, 95)
+        pmin = np.percentile(samples, float(min_quantile_value)*100)
+        pmax = np.percentile(samples, float(max_quantile_value)*100)
+
+        # Print the results
+        print("Representative Distribution from Gaussian Mixture Model (GMM):")
+        print(f"Mean: {means[0][0]:.2f}")
+        print(f"Covariance: {covariances[0][0][0]:.2f}")
+        print("Percentiles:")
+        print("P5: {:.2f}".format(p5))
+        print(f"P{float(min_quantile_value)*100}: {pmin:.2f}")
+        print(f"P{float(max_quantile_value)*100}: {pmax:.2f}")
+        print("P95: {:.2f}".format(pmax))
+        return p5, p95, pmin, pmax
+
+    #Điền các giá trị reference low, reference high của reference well (giếng khoan tiêu biểu được lựa chọn) từ các giá trị quantile đã tính 
+    #Hàm áp dụng thuật toán GMM để tính các giá trị quantile của đường log
+
+    def normalize_curve(df, curve_name, ref_low, ref_high, well_low, well_high, normalized_curve_name):
+        # Convert input parameters to float
+        ref_low = float(ref_low) if ref_low is not None else 0.0
+        ref_high = float(ref_high) if ref_high is not None else 0.0
+        well_low = float(well_low) if well_low is not None else 0.0
+        well_high = float(well_high) if well_high is not None else 0.0
+
+        def normalize(curve_val, ref_low, ref_high, well_low, well_high):
+            return ref_low + ((ref_high - ref_low) * ((curve_val - well_low) / (well_high - well_low)))
+
+        df[normalized_curve_name] = df.apply(lambda x: normalize(
+            float(x[curve_name]) if x[curve_name] is not None else 0.0,
+            ref_low, ref_high, 
+            float(x["well_low"]) if x["well_low"] is not None else 0.0, 
+            float(x["well_high"]) if x["well_high"] is not None else 0.0), axis=1)
+        
+        return df
+
+    df = df_full
+
+    df = drop_na_subset(df, curve_name)
+
+    # Calculate quantiles and normalize data #Stack
+    well_low = None
+    well_high = None
+
+    df["well_low"], df["well_high"] = quantile_new_col(df, curve_name, min_quantile_value, max_quantile_value)
+
+    if algorithm =='On':
+        print("Apply reference wells by Algorithm")
+        # Calculate quantiles and normalize data based on algorithm
+        _,_,ref_low,ref_high = gmm_analysis(df, curve_name)
+    else: 
+        print("Apply reference wells by User")
+        df = normalize_curve(df, curve_name, int(ref_low), int(ref_high), well_low, well_high, normalized_curve_name)
+    # # Apply shifting normalization
+    if linear_shift == "On":
+        print("Apply a point for Normalization")
+        #Hàm hiệu chỉnh đường log bằng cách  shift ngang
+        _,_,ref_low, ref_high = gmm_analysis(df, curve_name)
+        df = normalize_shifting_curve(df, curve_name, ref_low, well_low, normalized_curve_name)
+    else: 
+        print("Apply two points for Normalization")
+        df = normalize_curve(df, curve_name, ref_low, ref_high, well_low, well_high, normalized_curve_name)
+
+    df_nor = df[[normalized_curve_name, curve_name, "WELL"]]
+    print ('Danh sách giếng khoan đã được chuẩn hóa:', df_nor['WELL'].unique())
+    print ("Done processing data, moving to return output result")
+
+    # API return for output
+    custom_result = {}
+
+    if parameter.get("df_nor"):
+        custom_result["df_nor"] = df_nor
+    result_in_json_full = {
+        **parameter,
+        **custom_result
+    }
+    import json
+    def json_serializable(val):
+        if isinstance(val, pd.Series):
+            return val.to_dict()
+        elif isinstance(val, pd.DataFrame):
+            return val.to_dict(orient='split')
+        elif isinstance(val, np.ndarray):
+            return val.tolist()
+        else:
+            return val
+    result_in_json_full = {k: json_serializable(v) for k, v in result_in_json_full.items()}
+
+    # Lưu cấu trúc dữ liệu vào tệp tin JSON
     result_in_json = json.dumps(result_in_json_full)
     return result_in_json
