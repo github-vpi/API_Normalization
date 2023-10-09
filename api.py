@@ -14,7 +14,7 @@ app = FastAPI()
 
 @app.get('/hello')
 async def hello():
-    return {"message": "Hello World 1"}
+    return {"message": "Hello World 2"}
 
 
 @app.get('/fullprocess')
