@@ -1,6 +1,4 @@
 # ---------------------- Define schemas of Data -------------------------
-from typing import List, Optional, Any
-from pydantic import BaseModel
 import pandas as pd
 
 # # #Tạo thư viện sử dụng
