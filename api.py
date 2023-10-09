@@ -1,12 +1,7 @@
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import uvicorn
 import json
-from fastapi import Header, Query, status, APIRouter, HTTPException, FastAPI, UploadFile, File, Request, Form
-from pydantic import BaseModel
+from fastapi import HTTPException, FastAPI, UploadFile, File, Form
 import json as json
-from predict_handlers import normalize_API
+from domain import normalize_API, normalize_curve
 from typing import List
 from fastapi import UploadFile, HTTPException
 import lasio
@@ -22,7 +17,7 @@ async def hello():
     return {"message": "Hello World 1"}
 
 
-@app.get('/normalization')
+@app.get('/fullprocess')
 async def upload_las(las_files: List[UploadFile] = File(...), path_df: UploadFile = File(...), query_params: str = Form(...)):
     dfs = []  # list to store DataFrames
 
@@ -70,16 +65,24 @@ async def upload_las(las_files: List[UploadFile] = File(...), path_df: UploadFil
     predicted_result = normalize_API(df, path_df, parameter)
     return predicted_result
 
+@app.get('/onlynormalization')
+async def upload_las(path_df: UploadFile = File(...), query_params: str = Form(...)):
+    dfs = []  # list to store DataFrames
 
-@app.get('/testing')
-async def testing(message: str = Query(None, alias="message")):
-    content = f"""<html>
-                    <head>
-                        <title>Test Page</title>
-                    </head>
-                    <body>
-                        <h1>Test Page</h1>
-                        <p>Message: {message}</p>
-                    </body>
-                  </html>"""
-    return HTMLResponse(content=content, status_code=200)
+    # Read the CSV file into a DataFrame
+    path_df_contents = await path_df.read()  # read the file as bytes
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
+        temp_file.write(path_df_contents)
+    path_df = pd.read_csv(temp_file.name)
+    try:
+        # query_params_in_json = json.dumps(query_params)
+        parameter = json.loads(query_params)
+        # input_params_schema(**parameter)
+    except ValueError as e:
+        return {"detail": str(e)}
+    except Exception as e:
+        return {"detail": "Invalid JSON"}
+    
+    # Run prediction and return the result in JSON format
+    predicted_result = normalize_curve(path_df, parameter)
+    return predicted_result
